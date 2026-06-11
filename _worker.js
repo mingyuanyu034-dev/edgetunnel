@@ -4771,6 +4771,7 @@ async function DoH查询(域名, 记录类型, DoH解析服务 = "https://cloudf
 	const cacheKey = `${域名}:${记录类型}:${DoH解析服务}`;
 	const cached = DNS缓存.get(cacheKey);
 	if (cached && cached.expiry > Date.now()) return cached.records;
+	const 开始时间 = performance.now();
 	log(`[DoH查询] 开始查询 ${域名} ${记录类型} via ${DoH解析服务}`);
 	try {
 		// 记录类型字符串转数值
