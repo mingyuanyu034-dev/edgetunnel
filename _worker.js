@@ -52,7 +52,7 @@ export default {
 			await 反代参数获取(url, userID);
 			log(`[WebSocket] 命中请求: ${url.pathname}${url.search}`);
 			return await 处理WS请求(request, userID, url);
-		} else if (管理员密码 && !访问路径.startsWith('admin/') && 访问路径 !== 'login' && request.method === 'POST') {// gRPC/XHTTP代理
+		} else if (管理员密码 && !访问路径.startsWith('admin/') && 访问路径 !== 'login' && 访问路径 !== 'latency' && !访问路径.startsWith('latency') && request.method === 'POST') {// gRPC/XHTTP代理
 			await 反代参数获取(url, userID);
 			const referer = request.headers.get('Referer') || '';
 			const 命中XHTTP特征 = referer.includes('x_padding', 14) || referer.includes('x_padding=');
