@@ -1993,37 +1993,29 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 		}
 	async function connectProxyIP(address, port, data = null, 所有反代数组 = null, 启用反代失败兜底 = true) {
 		if (所有反代数组 && 所有反代数组.length > 0) {
-			for (let i = 0; i < 所有反代数组.length; i += TCP并发拨号数) {
-				const 候选列表 = [];
-				for (let j = 0; j < TCP并发拨号数 && i + j < 所有反代数组.length; j++) {
-					const 反代数组索引 = (缓存反代数组索引 + i + j) % 所有反代数组.length;
-					const [反代地址, 反代端口] = 所有反代数组[反代数组索引];
-					候选列表.push({ hostname: 反代地址, port: 反代端口, index: 反代数组索引 });
-				}
-				let socket = null, candidate = null;
-				try {
-					log(`[反代连接] 并发尝试 ${候选列表.length} 路: ${候选列表.map(候选 => `${候选.hostname}:${候选.port}`).join(', ')}`);
-					const 连接结果 = await 并发打开候选连接(候选列表);
-					socket = 连接结果.socket;
-					candidate = 连接结果.candidate;
-					await 写入首包(socket, data);
-					log(`[反代连接] 成功连接到: ${candidate.hostname}:${candidate.port} (索引: ${candidate.index})`);
-					缓存反代数组索引 = candidate.index;
-					return socket;
-				} catch (err) {
-					try { socket?.close?.() } catch (e) { }
-					log(`[反代连接] 本批连接失败: ${err.message || err}`);
-				}
+			// 一次性全量竞速所有反代候选（上限 6，CF free plan 并发限制）
+			const 竞速上限 = Math.min(6, 所有反代数组.length);
+			const 候选列表 = [];
+			for (let j = 0; j < 竞速上限; j++) {
+				const 反代数组索引 = j % 所有反代数组.length;
+				const [反代地址, 反代端口] = 所有反代数组[反代数组索引];
+				候选列表.push({ hostname: 反代地址, port: 反代端口, index: 反代数组索引 });
+			}
+			let socket = null, candidate = null;
+			try {
+				log(`[反代连接] 全量竞速 ${候选列表.length} 路: ${候选列表.map(c => `${c.hostname}:${c.port}`).join(', ')}`);
+				const 连接结果 = await 并发打开候选连接(候选列表);
+				socket = 连接结果.socket;
+				candidate = 连接结果.candidate;
+				await 写入首包(socket, data);
+				log(`[反代连接] 成功: ${candidate.hostname}:${candidate.port}`);
+				缓存反代数组索引 = candidate.index;
+				return socket;
+			} catch (err) {
+				try { socket?.close?.() } catch (e) { }
+				log(`[反代连接] 全量竞速失败: ${err.message || err}`);
 			}
 		}
-
-		if (启用反代失败兜底) return connectDirect(address, port, data, false);
-		else {
-			closeSocketQuietly(ws);
-			throw new Error('[反代连接] 所有反代连接失败，且未启用反代兜底，连接终止。');
-		}
-	}
-
 	async function connecttoPry(允许发送首包 = true) {
 		if (remoteConnWrapper.connectingPromise) {
 			await remoteConnWrapper.connectingPromise;
