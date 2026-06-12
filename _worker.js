@@ -724,8 +724,7 @@ async function 读取XHTTP首包(reader, token) {
 	};
 
 	const 尝试解析木马首包 = (data) => {
-		const 密码哈希 = sha224(token);
-		const 密码哈希字节 = new TextEncoder().encode(密码哈希);
+		const 密码哈希字节 = 获取sha224密码字节(token);
 		const length = data.byteLength;
 		if (length < 58) return { 状态: 'need_more' };
 		if (data[56] !== 0x0d || data[57] !== 0x0a) return { 状态: 'invalid' };
@@ -1073,9 +1072,9 @@ function 是有效WS早期数据(bytes, token) {
 	if (bytes.byteLength >= 18 && UUID字节匹配(bytes, 1, token)) return true;
 	if (bytes.byteLength < 58 || bytes[56] !== 0x0d || bytes[57] !== 0x0a) return false;
 
-	const trojanPassword = sha224(token);
+	const trojanPassword = 获取sha224密码字节(token);
 	for (let i = 0; i < 56; i++) {
-		if (bytes[i] !== trojanPassword.charCodeAt(i)) return false;
+		if (bytes[i] !== trojanPassword[i]) return false;
 	}
 	return true;
 }
@@ -1544,12 +1543,12 @@ const 木马文本解码器 = new TextDecoder();
 
 function 解析木马请求(buffer, passwordPlainText) {
 	const data = 数据转Uint8Array(buffer);
-	const sha224Password = sha224(passwordPlainText);
+	const sha224Password = 获取sha224密码字节(passwordPlainText);
 	if (data.byteLength < 58) return { hasError: true, message: "invalid data" };
 	let crLfIndex = 56;
 	if (data[crLfIndex] !== 0x0d || data[crLfIndex + 1] !== 0x0a) return { hasError: true, message: "invalid header format" };
 	for (let i = 0; i < crLfIndex; i++) {
-		if (data[i] !== sha224Password.charCodeAt(i)) return { hasError: true, message: "invalid password" };
+		if (data[i] !== sha224Password[i]) return { hasError: true, message: "invalid password" };
 	}
 
 	const socks5Index = crLfIndex + 2;
@@ -5719,6 +5718,20 @@ function sha224(s) {
 	}
 	return hex;
 }
+
+	// 缓存 Trojan SHA-224 密码哈希字节，避免每次连接重算
+	const sha224BytesCache = new Map();
+	function 获取sha224密码字节(token) {
+		let bytes = sha224BytesCache.get(token);
+		if (!bytes) {
+			const hex = sha224(token);
+			bytes = new Uint8Array(56);
+			for (let i = 0; i < 56; i++) bytes[i] = hex.charCodeAt(i);
+			if (sha224BytesCache.size > 32) sha224BytesCache.clear();
+			sha224BytesCache.set(token, bytes);
+		}
+		return bytes;
+	}
 
 async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com', UUID = '00000000-0000-4000-8000-000000000000') {
 	proxyIP = proxyIP.toLowerCase();
