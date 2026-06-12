@@ -2047,11 +2047,6 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 				newSocket = await connectProxyIP(`${查杀特征码}.tp1.090227.XyZ`, 1, 本次首包数据, 所有反代数组, 启用反代兜底);
 			}
 			if (本次发送首包) 已通过代理发送首包 = true;
-			// 竞速检查：若直连已先胜出，放弃此反代连接
-			if (remoteConnWrapper.socket) {
-				try { newSocket.close() } catch(e) {}
-				return;
-			}
 			remoteConnWrapper.socket = newSocket;
 			newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
 			connectStreams(newSocket, ws, respHeader, null);
@@ -2077,32 +2072,23 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 			throw err;
 		}
 		} else {
-			// 并行竞速：直连与反代同时发起，谁先成功用谁
-			let 直连Socket = null;
-			const 反代任务 = connecttoPry().catch(() => {});
+			// 后台预热反代 DNS 解析，直连失败时可立即使用缓存结果
+			解析地址端口(反代IP, host, yourUUID).catch(() => {});
 			try {
-				直连Socket = await connectDirect(host, portNum, rawData, true);
-				if (!remoteConnWrapper.socket) {
-					// 直连先成功
-					remoteConnWrapper.socket = 直连Socket;
-					connectStreams(直连Socket, ws, respHeader, async () => {
-						if (remoteConnWrapper.socket !== 直连Socket) return;
-						await connecttoPry();
-					});
-					log(`[TCP转发] 竞速: 直连胜出`);
-				} else {
-					// 反代已先胜出，connecttoPry 内部已启动 connectStreams
-					try { 直连Socket.close() } catch(e) {}
-					log(`[TCP转发] 竞速: 反代胜出`);
-				}
+				log(`[TCP转发] 尝试直连到: ${host}:${portNum}`);
+				const initialSocket = await connectDirect(host, portNum, rawData, true);
+				remoteConnWrapper.socket = initialSocket;
+				connectStreams(initialSocket, ws, respHeader, async () => {
+					if (remoteConnWrapper.socket !== initialSocket) return;
+					await connecttoPry();
+				});
 			} catch (err) {
-				log(`[TCP转发] 直连失败: ${err.message}，等待反代`);
-				if (err instanceof Error && err.name === '预加载解析为空' && !remoteConnWrapper.socket) {
+				log(`[TCP转发] 直连 ${host}:${portNum} 失败: ${err.message}`);
+				if (err instanceof Error && err.name === '预加载解析为空') {
 					closeSocketQuietly(ws);
 					throw err;
 				}
-				await 反代任务;
-				if (!remoteConnWrapper.socket) throw err;
+				await connecttoPry();
 			}
 		}
 	}
