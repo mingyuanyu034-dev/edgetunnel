@@ -485,7 +485,7 @@ export default {
 			} else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }) });
 		}
 
-		} else if (访问路径 === 'latency' || 访问路径.startsWith('latency')) {
+		if (访问路径 === 'latency' || 访问路径.startsWith('latency')) {
 			if (request.method === 'POST') {
 			const body = await request.text().catch(() => '');
 			let clientSent = 0;
