@@ -481,11 +481,32 @@ export default {
 					const cookies = request.headers.get('Cookie') || '';
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
 					if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
-				} else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
+			} else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
 			} else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }) });
 		}
 
-		let 伪装页URL = env.URL || 'nginx';
+		} else if (访问路径 === 'latency' || 访问路径.startsWith('latency')) {
+			if (request.method === 'POST') {
+				const body = await request.text().catch(() => '');
+				let clientSent = 0;
+				try { const j = JSON.parse(body); clientSent = j.t || 0; } catch (e) { }
+				const serverReceived = Date.now();
+				const serverSent = Date.now();
+				return new Response(JSON.stringify({
+					clientSent,
+					serverReceived,
+					serverSent,
+					colo: request.cf?.colo || 'unknown',
+					asn: request.cf?.asn || 0,
+				}), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8', 'Access-Control-Allow-Origin': '*' } });
+			}
+			const colo = request.cf?.colo || 'unknown';
+			const asn = request.cf?.asn || 'N/A';
+			const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+				return new Response(LATENCY_HTML(colo, asn, ip), { status: 200, headers: { 'Content-Type': 'text/html;charset=utf-8', 'Cache-Control': 'no-store' } });
+			}
+
+			let 伪装页URL = env.URL || 'nginx';
 		if (伪装页URL && 伪装页URL !== 'nginx' && 伪装页URL !== '1101') {
 			伪装页URL = 伪装页URL.trim().replace(/\/$/, '');
 			if (!伪装页URL.match(/^https?:\/\//i)) 伪装页URL = 'https://' + 伪装页URL;
@@ -5864,7 +5885,9 @@ async function nginx() {
 	</html>
 	`
 }
-
+function LATENCY_HTML(colo, asn, ip) {
+	return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Latency Test</title>\n<style>\n:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--yellow:#d2991d;--red:#f85149;--radius:8px}\n*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}\nbody{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 16px}\n.container{max-width:680px;width:100%}\n.header{text-align:center;margin-bottom:32px}\n.header h1{font-size:24px;font-weight:600;margin-bottom:4px}\n.header span{font-size:13px;color:var(--muted)}\n.info-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}\n.info-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;text-align:center}\n.info-card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}\n.info-card .value{font-size:18px;font-weight:600}\n.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-bottom:16px}\n.card h2{font-size:15px;font-weight:600;margin-bottom:16px}\n.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border:none;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all .15s}\n.btn-primary{background:var(--accent);color:#fff}\n.btn-primary:hover{opacity:.85}\n.btn-primary:disabled{opacity:.4;cursor:not-allowed}\n.results{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}\n.result-card{text-align:center;padding:12px;border-radius:var(--radius);border:1px solid var(--border)}\n.result-card .val{font-size:28px;font-weight:700;line-height:1.2}\n.result-card .lbl{font-size:11px;color:var(--muted);margin-top:2px}\n.val.green{color:var(--green)}.val.yellow{color:var(--yellow)}.val.red{color:var(--red)}\n.history{max-height:200px;overflow-y:auto;margin-top:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,monospace}\n.history .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);color:var(--muted)}\n.progress{height:3px;background:var(--border);border-radius:2px;margin-top:12px;overflow:hidden}\n.progress .bar{height:100%;background:var(--accent);transition:width .3s;width:0%}\n.notice{font-size:12px;color:var(--muted);text-align:center;margin-top:20px;line-height:1.6}\n</style>\n</head>\n<body>\n<div class="container">\n<div class="header"><h1>⚡ Edge Latency Test</h1><span>Pure round-trip to Cloudflare edge node</span></div>\n<div class="info-bar">\n<div class="info-card"><div class="label">Edge Colo</div><div class="value" id="colo">' + colo + '</div></div>\n<div class="info-card"><div class="label">Your ASN</div><div class="value" id="asn">' + asn + '</div></div>\n<div class="info-card"><div class="label">Your IP</div><div class="value" style="font-size:14px">' + ip + '</div></div>\n</div>\n<div class="card">\n<h2>🎯 Latency Test <span style="font-size:12px;color:var(--muted);font-weight:400" id="status">Ready</span></h2>\n<button class="btn btn-primary" id="startBtn" onclick="startTest()">▶ Start (10 rounds)</button>\n<div class="progress" id="progressWrap" style="display:none"><div class="bar" id="progressBar"></div></div>\n<div class="results">\n<div class="result-card"><div class="val" id="rttMin">--</div><div class="lbl">Min</div></div>\n<div class="result-card"><div class="val" id="rttAvg">--</div><div class="lbl">Avg</div></div>\n<div class="result-card"><div class="val" id="rttMax">--</div><div class="lbl">Max</div></div>\n</div>\n<div class="history" id="history"></div>\n</div>\n<div class="notice">🛡 Uses raw HTTP POST to Worker edge.<br>Results = device→colo RTT, not proxy speed.</div>\n</div>\n<script>\nconst ROUNDS=10,GAP=120;let results=[],running=false;\nfunction $(id){return document.getElementById(id)}\nfunction color(v){if(v<80)return"green";if(v<200)return"yellow";return"red"}\nfunction fmt(v){return v.toFixed(1)+" ms"}\nasync function startTest(){\nif(running)return;running=true;results=[];$("startBtn").disabled=true;$("progressWrap").style.display="block";$("history").innerHTML="";\nfor(let i=0;i<ROUNDS;i++){\n$("status").textContent="Round "+(i+1)+"/"+ROUNDS;$("progressBar").style.width=((i+1)/ROUNDS*100)+"%";\nconst t0=performance.now();\ntry{\nconst res=await fetch("/latency",{method:"POST",body:JSON.stringify({t:Date.now()}),headers:{"Content-Type":"application/json"}});\nconst data=await res.json();const t1=performance.now();\nconst total=t1-t0,serverProc=data.serverSent-data.serverReceived,net=Math.max(0,total-serverProc);\nresults.push({total,net,serverProc,colo:data.colo});\nconst row=document.createElement("div");row.className="row";\nrow.innerHTML="<span>#"+(i+1)+" "+data.colo+"</span><span>total <b>"+fmt(total)+"</b> net <b>"+fmt(net)+"</b></span>";\n$("history").prepend(row);\n}catch(e){results.push(null);const row=document.createElement("div");row.className="row";row.innerHTML="<span>#"+(i+1)+"</span><span style=color:var(--red)>Failed</span>";$("history").prepend(row)}\nawait new Promise(r=>setTimeout(r,GAP))}\nconst ok=results.filter(Boolean);if(ok.length>0){const nets=ok.map(r=>r.net);const m=Math.min(...nets),a=nets.reduce((x,y)=>x+y,0)/nets.length,M=Math.max(...nets);$("rttMin").textContent=fmt(m);$("rttMin").className="val "+color(m);$("rttAvg").textContent=fmt(a);$("rttAvg").className="val "+color(a);$("rttMax").textContent=fmt(M);$("rttMax").className="val "+color(M)}\n$("status").textContent="Done - "+ok.length+"/"+ROUNDS;$("startBtn").disabled=false;running=false}\n</script>\n</body>\n</html>';
+}
 async function html1101(host, 访问IP) {
 	const now = new Date();
 	const 格式化时间戳 = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
