@@ -2015,6 +2015,12 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 				try { socket?.close?.() } catch (e) { }
 				log(`[反代连接] 全量竞速失败: ${err.message || err}`);
 			}
+
+			if (启用反代失败兜底) return connectDirect(address, port, data, false);
+			else {
+				closeSocketQuietly(ws);
+				throw new Error('[反代连接] 所有反代连接失败，且未启用反代兜底，连接终止。');
+			}
 		}
 	async function connecttoPry(允许发送首包 = true) {
 		if (remoteConnWrapper.connectingPromise) {
