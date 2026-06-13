@@ -53,6 +53,7 @@ export default {
 		if (url.protocol === 'http:' && HTTP独占测速劫持路径表.has(url.pathname)) return new Response(null, { status: 204 });
 		if (url.protocol === 'http:' && url.pathname === '/www.msftconnecttest.com/connecttest.txt') return new Response('Microsoft Connect Test', { status: 200, headers: { 'Content-Type': 'text/plain' } });
 		if (url.pathname === '/captive.apple.com' || url.pathname === '/www.apple.com/library/test/success.html') return new Response('<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+		if (url.pathname === '/detectportal.firefox.com/success.txt') return new Response('success\n', { status: 200, headers: { 'Content-Type': 'text/plain' } });
 		if (访问路径 === 'version' && url.searchParams.get('uuid') === userID) {// 版本信息接口
 			return new Response(JSON.stringify({ Version: Number(String(Version).replace(/\D+/g, '')) }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 		} else if (管理员密码 && upgradeHeader === 'websocket') {// WebSocket代理
