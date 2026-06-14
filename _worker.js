@@ -503,10 +503,11 @@ export default {
 					const cookies = request.headers.get('Cookie') || '';
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
 					if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
-			} else if (访问路径.startsWith('raw.githubusercontent.com/') || 访问路径.startsWith('github.com/')) {
-					const isRaw = 访问路径.startsWith('raw.githubusercontent.com/');
+			} else if (url.pathname.startsWith('/raw.githubusercontent.com/') || url.pathname.startsWith('/github.com/')) {
+					const isRaw = url.pathname.startsWith('/raw.githubusercontent.com/');
 					const upstreamHost = isRaw ? 'raw.githubusercontent.com' : 'github.com';
-					const ghUrl = 'https://' + upstreamHost + '/' + 访问路径.slice(upstreamHost.length + 1) + url.search;
+					const ghPath = url.pathname.slice(('/' + upstreamHost + '/').length);
+					const ghUrl = 'https://' + upstreamHost + '/' + ghPath + url.search;
 					try {
 						const ghRes = await fetch(ghUrl, { headers: { 'User-Agent': 'edgetunnel-github-proxy' }, redirect: 'follow' });
 						const ghHeaders = new Headers(ghRes.headers);
