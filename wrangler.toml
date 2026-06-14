@@ -6,3 +6,6 @@ keep_vars = true
 [[kv_namespaces]]
 binding = "KV"
 id = "07a3cd73b4f74009886d50799830d579"
+
+[triggers]
+crons = ["*/30 * * * *"]
