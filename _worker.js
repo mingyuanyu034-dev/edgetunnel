@@ -287,11 +287,20 @@ export default {
 					} else if (访问路径 === 'admin/cf.json') {// CF配置文件
 						return new Response(JSON.stringify(request.cf, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 					} else if (访问路径 === 'admin/refresh-cache') {
+						const diag = {};
+						const t0 = performance.now();
+						try { diag.cidr = JSON.parse(await env.KV.get('PREFETCH_CIDR') || '{}'); } catch (e) { diag.cidr = String(e); }
+						diag.cidrKeys = Object.keys(diag.cidr || {}).filter(k => k !== '_ts');
+						diag.cidrTs = diag.cidr?._ts || 0;
+						try { diag.sub = JSON.parse(await env.KV.get('PREFETCH_SUB:https://sub.cmliussss.net') || '{}'); } catch (e) { diag.sub = String(e); }
+						diag.subIPs = Array.isArray(diag.sub?.优选IP) ? diag.sub.优选IP.length : 0;
+						diag.time = Math.round(performance.now() - t0);
 						ctx.waitUntil((async () => {
 							try { await refreshCIDR(); } catch (e) { }
 							try { await refreshSub(); } catch (e) { }
 						})());
-						return new Response(JSON.stringify({ status: 'started' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+						diag.refreshStarted = true;
+						return new Response(JSON.stringify(diag, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 					}
 
 					ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Admin_Login', config_JSON));
@@ -400,7 +409,7 @@ export default {
 								完整优选IP = [...new Set(优选IP.concat(优选API的IP))];
 							} else { // 优选订阅生成器
 								let 优选订阅生成器HOST = url.searchParams.get('sub') || config_JSON.优选订阅生成.SUB;
-								const [优选生成器IP数组, 优选生成器其他节点] = await 获取优选订阅生成器数据(优选订阅生成器HOST);
+								const [优选生成器IP数组, 优选生成器其他节点] = await 获取优选订阅生成器数据(优选订阅生成器HOST, env);
 								完整优选IP = 完整优选IP.concat(优选生成器IP数组);
 								其他节点LINK += 优选生成器其他节点;
 							}
@@ -5394,7 +5403,7 @@ async function 整理成数组(内容) {
 	return 地址数组;
 }
 
-async function 获取优选订阅生成器数据(优选订阅生成器HOST) {
+async function 获取优选订阅生成器数据(优选订阅生成器HOST, env = null) {
 	let 优选IP = [], 其他节点LINK = '', 格式化HOST = 优选订阅生成器HOST.replace(/^sub:\/\//i, 'https://').split('#')[0].split('?')[0];
 	if (!/^https?:\/\//i.test(格式化HOST)) 格式化HOST = `https://${格式化HOST}`;
 
@@ -5411,8 +5420,9 @@ async function 获取优选订阅生成器数据(优选订阅生成器HOST) {
 	// 优先查 KV 缓存（5 分钟 TTL）
 	const subCacheKey = 'PREFETCH_SUB:' + 格式化HOST;
 	try {
-		if (_KV) {
-			const cachedSub = await _KV.get(subCacheKey);
+		const kv = env?.KV || _KV;
+		if (kv) {
+			const cachedSub = await kv.get(subCacheKey);
 			if (cachedSub) {
 				const parsed = JSON.parse(cachedSub);
 				if (parsed._ts > Date.now() - 300000) return [parsed.优选IP || [], parsed.其他节点LINK || ''];
@@ -5454,6 +5464,9 @@ async function 获取优选订阅生成器数据(优选订阅生成器HOST) {
 				其他节点LINK += 行内容 + '\n';
 			}
 		}
+		// 写入 KV 缓存（5 分钟 TTL）
+		const kvPut = env?.KV || _KV;
+		try { if (kvPut && 优选IP.length) await kvPut.put(subCacheKey, JSON.stringify({ 优选IP, 其他节点LINK, _ts: Date.now() })); } catch (e) { }
 	} catch (error) {
 		优选IP.push(`127.0.0.1:1234#${优选订阅生成器HOST}优选订阅生成器异常:${error.message}`);
 	}
