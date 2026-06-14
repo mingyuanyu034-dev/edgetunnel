@@ -484,8 +484,8 @@ export default {
 								if (response.ok) {
 									订阅内容 = await response.text();
 									if (url.searchParams.has('surge') || ua.includes('surge')) 订阅内容 = Surge订阅配置文件热补丁(订阅内容, url.protocol + '//' + url.host + '/sub?token=' + 订阅TOKEN + '&surge', config_JSON);
-								// 写 KV 缓存（10 分钟 TTL）
-								try { if (env.KV && 订阅内容) await env.KV.put(subConvCacheKey, JSON.stringify({ content: 订阅内容, _ts: Date.now() })); } catch (e) { }
+								// 后台写 KV 缓存（10 分钟 TTL），不阻塞响应
+								ctx.waitUntil((async () => { try { if (env.KV && 订阅内容) await env.KV.put(subConvCacheKey, JSON.stringify({ content: 订阅内容, _ts: Date.now() })); } catch (e) { } })());
 								} else return new Response('订阅转换后端异常：' + response.statusText, { status: response.status });
 							} catch (error) {
 								return new Response('订阅转换后端异常：' + error.message, { status: 403 });
