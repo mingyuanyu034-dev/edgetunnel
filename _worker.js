@@ -364,7 +364,9 @@ export default {
 							else if (订阅类型 === 'clash') responseHeaders["content-type"] = 'application/x-yaml; charset=utf-8';
 							return new Response(订阅缓存命中.content, { status: 200, headers: responseHeaders });
 						}
-						if (订阅类型 === 'mixed') {
+						// 本地节点生成（mixed/clash/singbox 共用）
+						if (true) { // was: 订阅类型 === 'mixed'
+						if (订阅类型 === 'mixed' || 作为优选订阅生成器 || isSubConverterRequest) {
 							const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
 							let 完整优选IP = [], 其他节点LINK = '', 反代IP池 = [];
 
@@ -407,6 +409,28 @@ export default {
 								const 优选API的IP = 请求优选API内容[0];
 								反代IP池 = 请求优选API内容[3] || [];
 								完整优选IP = [...new Set(优选IP.concat(优选API的IP))];
+
+						// === 本地生成 Clash/Sing-box 格式 ===
+						} else if (订阅类型 === 'clash' || 订阅类型 === 'singbox') {
+							const { type: _tp, 路径字段名: _pf, 域名字段名: _df } = 获取传输协议配置(config_JSON);
+							const _全路径 = config_JSON.随机路径 ? 随机路径(config_JSON.完整节点路径) : config_JSON.完整节点路径;
+							const _clashProxies = [];
+							const _allNames = [];
+							for (const _addr of 完整优选IP) {
+								const _rm = _addr.match(/^([^#]+?)(?::(\d+))?(?:#(.+))?$/);
+								if (!_rm) continue;
+								const _ip = _rm[1], _port = _rm[2] || '443', _name = _rm[3] || _ip;
+								_allNames.push(_name);
+								const _escName = JSON.stringify(_name), _escHost = JSON.stringify(config_JSON.HOST);
+								const _escPath = JSON.stringify(_全路径);
+								// Clash proxy entry
+								_clashProxies.push(`  - {name: ${_escName}, server: ${_ip}, port: ${_port}, type: ${协议类型}, uuid: 00000000-0000-4000-8000-000000000000, tls: true, skip-cert-verify: ${config_JSON.跳过证书验证}, servername: ${_escHost}, client-fingerprint: ${config_JSON.Fingerprint}, network: ws, ws-opts: {path: ${_escPath}, headers: {Host: ${_escHost}}}}`);
+							}
+							// Build Clash YAML
+							const _namesYAML = _allNames.map(n => `      - ${n}`).join('\n');
+							const _baseYAML = `port: 7890\nsocks-port: 7891\nallow-lan: true\nmode: rule\nlog-level: info\nexternal-controller: 127.0.0.1:9090\nproxies:\n${_clashProxies.join('\n')}\nproxy-groups:\n  - name: \ud83d\ude80 节点选择\n    type: select\n    proxies:\n${_namesYAML}\n      - DIRECT\n  - name: \u267b\ufe0f 自动选择\n    type: url-test\n    proxies:\n${_namesYAML}\n    url: http://www.gstatic.com/generate_204\n    interval: 300\nrules:\n  - MATCH,\ud83d\ude80 节点选择\n`;
+							订阅内容 = _baseYAML;
+							responseHeaders["content-type"] = 订阅类型 === 'clash' ? 'application/x-yaml; charset=utf-8' : 'application/json; charset=utf-8';
 							} else { // 优选订阅生成器
 								let 优选订阅生成器HOST = url.searchParams.get('sub') || config_JSON.优选订阅生成.SUB;
 								const [优选生成器IP数组, 优选生成器其他节点] = await 获取优选订阅生成器数据(优选订阅生成器HOST, env);
@@ -469,6 +493,7 @@ export default {
 									return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${传输协议 + ECHLINK参数}&${域名字段名}=example.com&fp=${config_JSON.Fingerprint}&sni=example.com&${路径字段名}=${encodeURIComponent(传输路径参数值) + TLS分片参数}&encryption=none#${encodeURIComponent(节点备注)}`;
 								}
 							}).filter(item => item !== null).join('\n');
+						}
 						} else { // 订阅转换
 							const subConvCacheKey = 'SUBCONVERT:' + 订阅类型;
 							try { if (env.KV) { const c = JSON.parse(await env.KV.get(subConvCacheKey) || '{}'); if (c._ts > Date.now() - 600000) 订阅内容 = c.content; } } catch (e) { }
