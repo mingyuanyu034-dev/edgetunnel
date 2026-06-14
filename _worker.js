@@ -282,7 +282,7 @@ export default {
 						return new Response(JSON.stringify(config_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
 					} else if (区分大小写访问路径 === 'admin/ADD.txt') {// 处理 admin/ADD.txt 请求，返回本地优选IP
 						let 本地优选IP = await env.KV.get('ADD.txt') || 'null';
-						if (本地优选IP == 'null') 本地优选IP = (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[1];
+						if (本地优选IP == 'null') 本地优选IP = (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口, env))[1];
 						return new Response(本地优选IP, { status: 200, headers: { 'Content-Type': 'text/plain;charset=utf-8', 'asn': request.cf.asn } });
 					} else if (访问路径 === 'admin/cf.json') {// CF配置文件
 						return new Response(JSON.stringify(request.cf, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
@@ -355,9 +355,9 @@ export default {
 
 							if (!url.searchParams.has('sub') && config_JSON.优选订阅生成.local) { // 本地生成订阅
 								const 完整优选列表 = config_JSON.优选订阅生成.本地IP库.随机IP ? (
-									await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口)
+									await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口, env)
 								)[0] : await env.KV.get('ADD.txt') ? await 整理成数组(await env.KV.get('ADD.txt')) : (
-									await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口)
+									await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口, env)
 								)[0];
 								const 优选API = [], 优选IP = [], 其他节点 = [];
 								for (const 元素 of 完整优选列表) {
@@ -5282,7 +5282,7 @@ function 识别运营商(request) {
 	return 命中运营商 || ASN运营商映射[String(cf?.asn || '')] || 'cf';
 }
 
-async function 生成随机IP(request, count = 16, 指定端口 = -1) {
+async function 生成随机IP(request, count = 16, 指定端口 = -1, env = null) {
 	const url = new URL(request.url);
 	const 查询参数运营商 = String(url.searchParams.get('cnIspCode') || '').toLowerCase();
 	const 运营商文件标识 = ['ct', 'cu', 'cmcc', 'cf'].includes(查询参数运营商) ? 查询参数运营商 : 识别运营商(request);
@@ -5298,7 +5298,7 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
 	let cidrList = [];
 	// 优先读取 KV 预取缓存（scheduled handler 定时更新）
 	try {
-		const cached = _KV ? await _KV.get('PREFETCH_CIDR') : null;
+		const cached = env?.KV ? await env?.KV.get('PREFETCH_CIDR') : null;
 		if (cached) {
 			const parsed = JSON.parse(cached);
 			cidrList = parsed[运营商文件标识] || parsed['cf'] || [];
@@ -5313,12 +5313,12 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
 				const raw = await res.text();
 				cidrList = await 整理成数组(raw);
 				// 写入 KV 供后续请求（含 SUBAPI 回调）瞬间命中
-				if (_KV && cidrList.length) {
+				if (env?.KV && cidrList.length) {
 					try {
-						const prev = JSON.parse((await _KV.get('PREFETCH_CIDR')) || '{}');
+						const prev = JSON.parse((await env?.KV.get('PREFETCH_CIDR')) || '{}');
 						prev[运营商文件标识] = cidrList;
 						prev._ts = Date.now();
-						await _KV.put('PREFETCH_CIDR', JSON.stringify(prev));
+						await env?.KV.put('PREFETCH_CIDR', JSON.stringify(prev));
 					} catch (e) { }
 				}
 			} else cidrList = ['104.16.0.0/13'];
