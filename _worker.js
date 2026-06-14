@@ -493,7 +493,8 @@ export default {
 							订阅内容 = Clash订阅配置文件热补丁(订阅内容, config_JSON);
 							responseHeaders["content-type"] = 'application/x-yaml; charset=utf-8';
 						}
-						订阅缓存.set(订阅缓存键, { content: 订阅内容, expiry: Date.now() + 30000 });
+						订阅内容 = 订阅内容.replace(/https:\/\/raw\.githubusercontent\.com\//g, url.protocol + '//' + url.host + '/raw.githubusercontent.com/');
+							订阅缓存.set(订阅缓存键, { content: 订阅内容, expiry: Date.now() + 30000 });
 						if (订阅缓存.size > 32) { const now = Date.now(); for (const [k, v] of 订阅缓存) { if (v.expiry <= now) 订阅缓存.delete(k); } }
 						return new Response(订阅内容, { status: 200, headers: responseHeaders });
 					}
@@ -501,7 +502,16 @@ export default {
 					const cookies = request.headers.get('Cookie') || '';
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
 					if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
-			} else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
+			} else if (访问路径.startsWith('raw.githubusercontent.com/')) {
+					const ghUrl = 'https://raw.githubusercontent.com/' + 访问路径.slice('raw.githubusercontent.com/'.length) + url.search;
+					try {
+						const ghRes = await fetch(ghUrl, { headers: { 'User-Agent': 'edgetunnel-github-proxy' } });
+						const ghHeaders = new Headers(ghRes.headers);
+						ghHeaders.set('Access-Control-Allow-Origin', '*');
+						ghHeaders.set('Cache-Control', 'public, max-age=86400');
+						return new Response(ghRes.body, { status: ghRes.status, headers: ghHeaders });
+					} catch (e) { return new Response('GitHub proxy error', { status: 502 }); }
+				} else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
 			} else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }) });
 		}
 
