@@ -353,7 +353,7 @@ export default {
 							const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
 							let 完整优选IP = [], 其他节点LINK = '', 反代IP池 = [];
 
-							if (!url.searchParams.has('sub')) { // 始终本地生成——CIDR 已在 KV 缓存，零外部依赖
+							if (!url.searchParams.has('sub') && (config_JSON.优选订阅生成.local || 作为优选订阅生成器)) { // 本地生成订阅（优选订阅生成器强制本地，防自引用递归）
 								const 完整优选列表 = config_JSON.优选订阅生成.本地IP库.随机IP ? (
 									await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口, env)
 								)[0] : await env.KV.get('ADD.txt') ? await 整理成数组(await env.KV.get('ADD.txt')) : (
@@ -570,7 +570,7 @@ export default {
 	},
 	async scheduled(event, env, ctx) {
 		_KV = env.KV;
-		ctx.waitUntil(refreshCIDR());
+		ctx.waitUntil((async () => { await refreshCIDR(); await refreshSub(); })());
 	}
 };
 	//////////////////////////////////////////////////////////////////定时预取 KV 缓存//////////////////////////////////////////
@@ -597,6 +597,38 @@ export default {
 			cidrCache._ts = Date.now();
 			await _KV.put("PREFETCH_CIDR", JSON.stringify(cidrCache));
 		}
+	}
+	async function refreshSub() {
+		if (!_KV) return;
+		const subUrl = 'https://sub.cmliussss.net/sub?host=example.com&uuid=00000000-0000-4000-8000-000000000000';
+		try {
+			const ctrl = new AbortController();
+			const t = setTimeout(() => ctrl.abort(), 15000);
+			const res = await fetch(subUrl, {
+				headers: { 'User-Agent': 'v2rayN/edge' + 'tunnel (https://github.com/cmliu/edge' + 'tunnel)' },
+				signal: ctrl.signal
+			});
+			clearTimeout(t);
+			if (!res.ok) return;
+			const text = atob(await res.text());
+			const lines = text.includes('\r\n') ? text.split('\r\n') : text.split('\n');
+			const 优选IP = [];
+			for (const line of lines) {
+				if (!line.trim()) continue;
+				if (line.includes('00000000-0000-4000-8000-000000000000') && line.includes('example.com')) {
+					const m = line.match(/:\/\/[^@]+@([^?]+)/);
+					if (m) {
+						let addr = m[1], remark = '';
+						const rm = line.match(/#(.+)$/);
+						if (rm) remark = '#' + decodeURIComponent(rm[1]);
+						优选IP.push(addr + remark);
+					}
+				}
+			}
+			if (优选IP.length) {
+				await _KV.put('PREFETCH_SUB:https://sub.cmliussss.net', JSON.stringify({ 优选IP, 其他节点LINK: '', _ts: Date.now() }));
+			}
+		} catch (e) { }
 	}
 ///////////////////////////////////////////////////////////////////////XHTTP传输数据///////////////////////////////////////////////
 async function 处理XHTTP请求(request, yourUUID) {
@@ -5364,14 +5396,26 @@ async function 获取优选订阅生成器数据(优选订阅生成器HOST) {
 
 	const 优选订阅生成器URL = `${格式化HOST}/sub?host=example.com&uuid=00000000-0000-4000-8000-000000000000`;
 
+	// 优先查 KV 缓存（5 分钟 TTL）
+	const subCacheKey = 'PREFETCH_SUB:' + 格式化HOST;
+	try {
+		if (_KV) {
+			const cachedSub = await _KV.get(subCacheKey);
+			if (cachedSub) {
+				const parsed = JSON.parse(cachedSub);
+				if (parsed._ts > Date.now() - 300000) return [parsed.优选IP || [], parsed.其他节点LINK || ''];
+			}
+		}
+	} catch (e) { }
+
 	try {
 		const controller = new AbortController();
-	const timeoutId = setTimeout(() => controller.abort(), 8000);
-	const response = await fetch(优选订阅生成器URL, {
+		const timeoutId = setTimeout(() => controller.abort(), 8000);
+		const response = await fetch(优选订阅生成器URL, {
 			headers: { 'User-Agent': 'v2rayN/edge' + 'tunnel (https://github.com/cmliu/edge' + 'tunnel)' },
 			signal: controller.signal
 		});
-	clearTimeout(timeoutId);
+		clearTimeout(timeoutId);
 
 		if (!response.ok) {
 			优选IP.push(`127.0.0.1:1234#${优选订阅生成器HOST}优选订阅生成器异常:${response.statusText}`);
