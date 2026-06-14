@@ -493,7 +493,8 @@ export default {
 							订阅内容 = Clash订阅配置文件热补丁(订阅内容, config_JSON);
 							responseHeaders["content-type"] = 'application/x-yaml; charset=utf-8';
 						}
-						订阅内容 = 订阅内容.replace(/https:\/\/raw\.githubusercontent\.com\//g, url.protocol + '//' + url.host + '/raw.githubusercontent.com/');
+						const ghProxyOrigin = url.protocol + '//' + url.host;
+							订阅内容 = 订阅内容.replace(/https:\/\/raw\.githubusercontent\.com\//g, ghProxyOrigin + '/raw.githubusercontent.com/').replace(/https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/download\//g, ghProxyOrigin + '/github.com/$1/$2/releases/download/');
 							订阅缓存.set(订阅缓存键, { content: 订阅内容, expiry: Date.now() + 30000 });
 						if (订阅缓存.size > 32) { const now = Date.now(); for (const [k, v] of 订阅缓存) { if (v.expiry <= now) 订阅缓存.delete(k); } }
 						return new Response(订阅内容, { status: 200, headers: responseHeaders });
@@ -502,10 +503,12 @@ export default {
 					const cookies = request.headers.get('Cookie') || '';
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
 					if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
-			} else if (访问路径.startsWith('raw.githubusercontent.com/')) {
-					const ghUrl = 'https://raw.githubusercontent.com/' + 访问路径.slice('raw.githubusercontent.com/'.length) + url.search;
+			} else if (访问路径.startsWith('raw.githubusercontent.com/') || 访问路径.startsWith('github.com/')) {
+					const isRaw = 访问路径.startsWith('raw.githubusercontent.com/');
+					const upstreamHost = isRaw ? 'raw.githubusercontent.com' : 'github.com';
+					const ghUrl = 'https://' + upstreamHost + '/' + 访问路径.slice(upstreamHost.length + 1) + url.search;
 					try {
-						const ghRes = await fetch(ghUrl, { headers: { 'User-Agent': 'edgetunnel-github-proxy' } });
+						const ghRes = await fetch(ghUrl, { headers: { 'User-Agent': 'edgetunnel-github-proxy' }, redirect: 'follow' });
 						const ghHeaders = new Headers(ghRes.headers);
 						ghHeaders.set('Access-Control-Allow-Origin', '*');
 						ghHeaders.set('Cache-Control', 'public, max-age=86400');
