@@ -476,10 +476,10 @@ export default {
 							const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 今日订阅转换后端专属TOKEN + '&cnIspCode=' + 识别运营商(request) + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
 							try {
 								const subController = new AbortController();
-								const subTimeout = setTimeout(() => subController.abort(), 15000);
+								const subTimeout = setTimeout(() => subController.abort(), 30000);
 								const response = await Promise.race([
 									fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel (https://github.com/cmliu/edge' + 'tunnel)' }, signal: subController.signal }),
-									new Promise((_, reject) => setTimeout(() => reject(new Error('SUBAPI timeout')), 15000))
+									new Promise((_, reject) => setTimeout(() => reject(new Error('SUBAPI timeout')), 30000))
 								]);
 								if (response.ok) {
 									订阅内容 = await response.text();
