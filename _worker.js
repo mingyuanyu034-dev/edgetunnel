@@ -5304,9 +5304,25 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
 			cidrList = parsed[运营商文件标识] || parsed['cf'] || [];
 		}
 	} catch (e) { }
-	// KV 未命中时回退直接 fetch（带 3s 超时）
+	// KV 未命中时回退直接 fetch（带 3s 超时），成功后写回 KV
 	if (!cidrList.length) {
-		try { const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 3000); const res = await fetch(cidr_url, { signal: ctrl.signal }); clearTimeout(t); cidrList = res.ok ? await 整理成数组(await res.text()) : ['104.16.0.0/13'] } catch { cidrList = ['104.16.0.0/13'] }
+		try {
+			const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 3000);
+			const res = await fetch(cidr_url, { signal: ctrl.signal }); clearTimeout(t);
+			if (res.ok) {
+				const raw = await res.text();
+				cidrList = await 整理成数组(raw);
+				// 写入 KV 供后续请求（含 SUBAPI 回调）瞬间命中
+				if (_KV && cidrList.length) {
+					try {
+						const prev = JSON.parse((await _KV.get('PREFETCH_CIDR')) || '{}');
+						prev[运营商文件标识] = cidrList;
+						prev._ts = Date.now();
+						await _KV.put('PREFETCH_CIDR', JSON.stringify(prev));
+					} catch (e) { }
+				}
+			} else cidrList = ['104.16.0.0/13'];
+		} catch { cidrList = ['104.16.0.0/13'] }
 	}
 
 	const generateRandomIPFromCIDR = (cidr) => {
