@@ -474,7 +474,7 @@ export default {
 							try { if (env.KV) { const c = JSON.parse(await env.KV.get(subConvCacheKey) || '{}'); if (c._ts > Date.now() - 600000) 订阅内容 = c.content; } } catch (e) { }
 							if (!订阅内容) {
 							// SUBCONFIG 走 Worker 反代，避免 SUBAPI 直连 GitHub 超时
-							const 反代SUBCONFIG = config_JSON.订阅转换配置.SUBCONFIG.replace("https://raw.githubusercontent.com/", url.protocol + "//" + url.host + "/raw.githubusercontent.com/");
+							const 反代SUBCONFIG = url.protocol + "//" + url.host + "/gh-proxy-config?url=" + encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG);
 							const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 今日订阅转换后端专属TOKEN + '&cnIspCode=' + 识别运营商(request) + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(反代SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
 							try {
 								const subController = new AbortController();
@@ -543,6 +543,17 @@ export default {
 						return new Response(ghRes.body, { status: ghRes.status, headers: ghHeaders,
 							cf: { cacheEverything: true, cacheTtl: 86400 } });
 					} catch (e) { return new Response('GitHub proxy error', { status: 502 }); }
+				} else if (访问路径 === 'gh-proxy-config') {
+					// 抓取 ACL4SSR SUBCONFIG 并改写内部 GitHub URL→Worker 反代
+					const srcUrl = url.searchParams.get('url') || 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Mini_MultiMode_CF.ini';
+					try {
+						const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10000);
+						const r = await fetch(srcUrl, { signal: ctrl.signal }); clearTimeout(t);
+						if (!r.ok) return new Response('fetch error', { status: 502 });
+						let text = await r.text();
+						text = text.replace(/https:\/\/raw\.githubusercontent\.com\//g, url.protocol + '//' + url.host + '/raw.githubusercontent.com/');
+						return new Response(text, { status: 200, headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+					} catch (e) { return new Response('proxy error', { status: 502 }); }
 				} else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
 			} else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }) });
 		}
