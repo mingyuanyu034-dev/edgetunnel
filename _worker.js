@@ -473,7 +473,9 @@ export default {
 							const subConvCacheKey = 'SUBCONVERT:' + 订阅类型;
 							try { if (env.KV) { const c = JSON.parse(await env.KV.get(subConvCacheKey) || '{}'); if (c._ts > Date.now() - 600000) 订阅内容 = c.content; } } catch (e) { }
 							if (!订阅内容) {
-							const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 今日订阅转换后端专属TOKEN + '&cnIspCode=' + 识别运营商(request) + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
+							// SUBCONFIG 走 Worker 反代，避免 SUBAPI 直连 GitHub 超时
+							const 反代SUBCONFIG = config_JSON.订阅转换配置.SUBCONFIG.replace("https://raw.githubusercontent.com/", url.protocol + "//" + url.host + "/raw.githubusercontent.com/");
+							const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 今日订阅转换后端专属TOKEN + '&cnIspCode=' + 识别运营商(request) + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(反代SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
 							try {
 								const subController = new AbortController();
 								const subTimeout = setTimeout(() => subController.abort(), 30000);
