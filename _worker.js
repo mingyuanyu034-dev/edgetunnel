@@ -382,11 +382,12 @@ export default {
 							} catch (e) { console.error('[SUB-KV] read error:', e.message || e); }
 						}
 						if (订阅内容) return new Response(订阅内容, { status: 200, headers: responseHeaders });
-						const 订阅缓存命中 = 订阅缓存.get(订阅缓存键);
-						if (订阅缓存命中 && 订阅缓存命中.expiry > Date.now()) {
-							if (订阅类型 === 'singbox') responseHeaders["content-type"] = 'application/json; charset=utf-8';
-							else if (订阅类型 === 'clash') responseHeaders["content-type"] = 'application/x-yaml; charset=utf-8';
-							return new Response(订阅缓存命中.content, { status: 200, headers: responseHeaders });
+						// clash/singbox 不走内存缓存——KV 已是缓存层，内存命中会阻塞 SUBAPI 刷新
+						if (订阅类型 === 'mixed') {
+							const 订阅缓存命中 = 订阅缓存.get(订阅缓存键);
+							if (订阅缓存命中 && 订阅缓存命中.expiry > Date.now()) {
+								return new Response(订阅缓存命中.content, { status: 200, headers: responseHeaders });
+							}
 						}
 						if (true) { // mixed/clash/singbox 共用
 							const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
