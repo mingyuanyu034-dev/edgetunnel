@@ -374,7 +374,7 @@ export default {
 								const raw = await env.KV.get(kvKey);
 								if (raw) {
 									const cc = JSON.parse(raw);
-									if (cc._ts > Date.now() - 3600000 && cc.content && cc.content.length > 10000) {
+									if (cc._ts > Date.now() - 3600000 && cc.content && cc.content.length > 10000 && !cc.content.includes("example.com")) {
 										订阅内容 = cc.content;
 										responseHeaders['content-type'] = 订阅类型 === 'clash' ? 'application/x-yaml; charset=utf-8' : 'application/json; charset=utf-8';
 									}
