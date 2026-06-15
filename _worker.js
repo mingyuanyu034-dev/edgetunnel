@@ -479,11 +479,16 @@ export default {
 						// === Clash/Sing-box 本地生成 ===
 						} else if (订阅类型 === 'clash' || 订阅类型 === 'singbox') {
 							const _全路径 = config_JSON.随机路径 ? 随机路径(config_JSON.完整节点路径) : config_JSON.完整节点路径;
-							const _chP = [], _chN = [];
+							const _chP = [], _chN = [], _seen = new Map();
 							for (const _addr of 完整优选IP) {
 								const _rm = _addr.match(/^([^#]+?)(?::(\d+))?(?:#(.+))?$/);
 								if (!_rm) continue;
-								const _ip = _rm[1], _pt = _rm[2] || '443', _nm = _rm[3] || _ip;
+								const _ip = _rm[1], _pt = _rm[2] || '443';
+								let _nm = _rm[3] || _ip;
+								// 去重：同名加后缀
+								const _cnt = _seen.get(_nm) || 0;
+								_seen.set(_nm, _cnt + 1);
+								if (_cnt > 0) _nm = _nm + ' ' + _cnt;
 								_chN.push(_nm);
 								const _en = JSON.stringify(_nm), _eh = JSON.stringify(config_JSON.HOST), _ep = JSON.stringify(_全路径);
 								_chP.push('  - {name: ' + _en + ', server: ' + _ip + ', port: ' + _pt + ', type: ' + 协议类型 + ', uuid: 00000000-0000-4000-8000-000000000000, tls: true, skip-cert-verify: ' + config_JSON.跳过证书验证 + ', servername: ' + _eh + ', client-fingerprint: ' + config_JSON.Fingerprint + ', network: ws, ws-opts: {path: ' + _ep + ', headers: {Host: ' + _eh + '}}}');
