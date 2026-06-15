@@ -311,6 +311,14 @@ export default {
 					响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
 					return 响应;
 				} else if (访问路径 === 'sub') {//处理订阅请求
+						if (url.searchParams.has('debug')) {
+							const _dbg = { kv: {} };
+							try { const r = await env.KV.get('SUBCONVERT:clash'); _dbg.kv.clash = r ? { ts: JSON.parse(r)._ts, len: JSON.parse(r).content?.length, age: Date.now() - JSON.parse(r)._ts } : null; } catch(e) { _dbg.kv.clash = 'error: '+e.message; }
+							try { const r = await env.KV.get('SUBCONVERT:singbox'); _dbg.kv.singbox = r ? { ts: JSON.parse(r)._ts, len: JSON.parse(r).content?.length, age: Date.now() - JSON.parse(r)._ts } : null; } catch(e) { _dbg.kv.singbox = 'error: '+e.message; }
+							try { const r = await env.KV.get('PREFETCH_CIDR'); _dbg.kv.cidr = r ? { ts: JSON.parse(r)._ts, keys: Object.keys(JSON.parse(r)).filter(k=>k!=='_ts') } : null; } catch(e) { _dbg.kv.cidr = 'error: '+e.message; }
+							try { const r = await env.KV.get('PREFETCH_SUB:https://sub.cmliussss.net'); _dbg.kv.sub = r ? { ts: JSON.parse(r)._ts, ips: JSON.parse(r).优选IP?.length } : null; } catch(e) { _dbg.kv.sub = 'error: '+e.message; }
+							return new Response(JSON.stringify(_dbg, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
+						}
 					const 订阅TOKEN = await MD5MD5(host + userID), 作为优选订阅生成器 = ['1', 'true'].includes(env.BEST_SUB) && url.searchParams.get('host') === 'example.com' && url.searchParams.get('uuid') === '00000000-0000-4000-8000-000000000000' && UA.toLowerCase().includes('tunnel (https://github.com/cmliu/edge');
 					const 请求TOKEN = url.searchParams.get('token');
 					const 用户客户端请求订阅 = 请求TOKEN === 订阅TOKEN;
@@ -361,7 +369,17 @@ export default {
 						const 订阅缓存键 = `${订阅TOKEN}:${订阅类型}`;
 						// KV 缓存优先（scheduled/后台预热的 SUBAPI 完整结果，含 ACL4SSR 规则）
 						if ((订阅类型 === 'clash' || 订阅类型 === 'singbox') && !订阅内容) {
-							try { if (env.KV) { const cc = JSON.parse(await env.KV.get('SUBCONVERT:' + 订阅类型) || '{}'); if (cc._ts > Date.now() - 3600000) { 订阅内容 = cc.content; responseHeaders['content-type'] = 订阅类型 === 'clash' ? 'application/x-yaml; charset=utf-8' : 'application/json; charset=utf-8'; } } } catch (e) { }
+							try {
+								const kvKey = 'SUBCONVERT:' + 订阅类型;
+								const raw = await env.KV.get(kvKey);
+								if (raw) {
+									const cc = JSON.parse(raw);
+									if (cc._ts > Date.now() - 3600000 && cc.content && cc.content.length > 10000) {
+										订阅内容 = cc.content;
+										responseHeaders['content-type'] = 订阅类型 === 'clash' ? 'application/x-yaml; charset=utf-8' : 'application/json; charset=utf-8';
+									}
+								}
+							} catch (e) { console.error('[SUB-KV] read error:', e.message || e); }
 						}
 						if (订阅内容) return new Response(订阅内容, { status: 200, headers: responseHeaders });
 						const 订阅缓存命中 = 订阅缓存.get(订阅缓存键);
