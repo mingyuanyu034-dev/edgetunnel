@@ -298,6 +298,7 @@ export default {
 						ctx.waitUntil((async () => {
 							try { await refreshCIDR(); } catch (e) { }
 							try { await refreshSub(); } catch (e) { }
+							try { await refreshSubAPI(env); } catch (e) { }
 						})());
 						diag.refreshStarted = true;
 						return new Response(JSON.stringify(diag, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
@@ -645,7 +646,7 @@ export default {
 	},
 	async scheduled(event, env, ctx) {
 		_KV = env.KV;
-		ctx.waitUntil((async () => { await refreshCIDR(); await refreshSub(); })());
+		ctx.waitUntil((async () => { await refreshCIDR(); await refreshSub(); await refreshSubAPI(env); })());
 	}
 };
 	//////////////////////////////////////////////////////////////////定时预取 KV 缓存//////////////////////////////////////////
@@ -705,6 +706,44 @@ export default {
 			}
 		} catch (e) { }
 	}
+	async function refreshSubAPI(env) {
+		if (!_KV || !env) return;
+		try {
+			const adminPwd = env.ADMIN || env.admin || env.PASSWORD || env.password || '';
+			const encKey = env.KEY || '勿动此默认密钥';
+			if (!adminPwd) return;
+			const userIDmd5 = await MD5MD5(adminPwd + encKey);
+			const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+			const envUUID = env.UUID || env.uuid;
+			const userID = (envUUID && uuidRegex.test(envUUID)) ? envUUID.toLowerCase() : [userIDmd5.slice(0, 8), userIDmd5.slice(8, 12), '4' + userIDmd5.slice(13, 16), '8' + userIDmd5.slice(17, 20), userIDmd5.slice(20)].join('-');
+			const hosts = env.HOST ? (await 整理成数组(env.HOST)).map(h => h.toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0]) : [];
+			const host = hosts[0];
+			if (!host) return;
+			const cTOKEN = await MD5MD5(host + userID);
+			const daySeq = Math.floor(Date.now() / 86400000);
+			const seed = base64SecretEncode(cTOKEN, userID);
+			const convToken = await MD5MD5(seed + daySeq);
+			const workerHost = host;
+			const subapi = 'https://SUBAPI.cmliussss.net';
+			const suConfig = 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Mini_MultiMode_CF.ini';
+			const mirrorConfig = suConfig.replace('https://raw.githubusercontent.com/', 'https://'+workerHost+'/raw.githubusercontent.com/');
+			const mixedURL = 'https://'+workerHost+'/sub?target=mixed&token='+convToken;
+			for (const fmt of ['clash', 'singbox']) {
+				try {
+					const url = subapi+'/sub?target='+fmt+'&url='+encodeURIComponent(mixedURL)+'&config='+encodeURIComponent(mirrorConfig)+'&emoji=false';
+					const ctrl = new AbortController();
+					const t = setTimeout(() => ctrl.abort(), 120000);
+					const res = await fetch(url, { headers: { 'User-Agent': 'edgetunnel-scheduled-warmer' }, signal: ctrl.signal });
+					clearTimeout(t);
+					if (res.ok) {
+						const text = await res.text();
+						if (text.length > 10000) await _KV.put('SUBCONVERT:'+fmt, JSON.stringify({ content: text, _ts: Date.now() }));
+					}
+				} catch (e) { }
+			}
+		} catch (e) { }
+	}
+
 ///////////////////////////////////////////////////////////////////////XHTTP传输数据///////////////////////////////////////////////
 async function 处理XHTTP请求(request, yourUUID) {
 	if (!request.body) return new Response('Bad Request', { status: 400 });
