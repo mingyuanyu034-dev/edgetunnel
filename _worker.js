@@ -494,27 +494,36 @@ export default {
 									return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${传输协议 + ECHLINK参数}&${域名字段名}=example.com&fp=${config_JSON.Fingerprint}&sni=example.com&${路径字段名}=${encodeURIComponent(传输路径参数值) + TLS分片参数}&encryption=none#${encodeURIComponent(节点备注)}`;
 								}
 							}).filter(item => item !== null).join('\n');
-						// === Clash/Sing-box 本地生成 ===
+						// === Clash/Sing-box: SUBAPI 同步 + 本地 fallback ===
 						} else if (订阅类型 === 'clash' || 订阅类型 === 'singbox') {
-							const _全路径 = config_JSON.随机路径 ? 随机路径(config_JSON.完整节点路径) : config_JSON.完整节点路径;
-							const _chP = [], _chN = [], _seen = new Map();
-							for (const _addr of 完整优选IP) {
-								const _rm = _addr.match(/^([^#]+?)(?::(\d+))?(?:#(.+))?$/);
-								if (!_rm) continue;
-								const _ip = _rm[1], _pt = _rm[2] || '443';
-								let _nm = _rm[3] || _ip;
-								// 去重：同名加后缀
-								const _cnt = _seen.get(_nm) || 0;
-								_seen.set(_nm, _cnt + 1);
-								if (_cnt > 0) _nm = _nm + ' ' + _cnt;
-								_chN.push(_nm);
-								const _en = JSON.stringify(_nm), _eh = JSON.stringify(config_JSON.HOST), _ep = JSON.stringify(_全路径);
-								_chP.push('  - {name: ' + _en + ', server: ' + _ip + ', port: ' + _pt + ', type: ' + 协议类型 + ', uuid: 00000000-0000-4000-8000-000000000000, tls: true, skip-cert-verify: ' + config_JSON.跳过证书验证 + ', servername: ' + _eh + ', client-fingerprint: ' + config_JSON.Fingerprint + ', network: ws, ws-opts: {path: ' + _ep + ', headers: {Host: ' + _eh + '}}}');
+							// 优先同步调 SUBAPI（45s），失败回退本地
+							try {
+								const _rc = config_JSON.订阅转换配置.SUBCONFIG.replace('https://raw.githubusercontent.com/', url.protocol + '//' + url.host + '/raw.githubusercontent.com/');
+								const _su = config_JSON.订阅转换配置.SUBAPI + '/sub?target=' + 订阅类型 + '&url=' + encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 今日订阅转换后端专属TOKEN) + '&config=' + encodeURIComponent(_rc) + '&emoji=' + (config_JSON.订阅转换配置.SUBEMOJI||false) + '&scv=' + (config_JSON.跳过证书验证||false);
+								const _sc = new AbortController(); const _st = setTimeout(() => _sc.abort(), 45000);
+								const _sr = await fetch(_su, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel (https://github.com/cmliu/edge' + 'tunnel)' }, signal: _sc.signal });
+								clearTimeout(_st);
+								if (_sr.ok) { const _txt = await _sr.text(); if (_txt && _txt.length > 10000) { 订阅内容 = _txt; ctx.waitUntil((async () => { try { if (env.KV) await env.KV.put('SUBCONVERT:' + 订阅类型, JSON.stringify({ content: _txt, _ts: Date.now() })); } catch (e) { } })()); } }
+							} catch (e) { }
+							// SUBAPI 失败 → 本地生成 fallback
+							if (!订阅内容) {
+								const _全路径 = config_JSON.随机路径 ? 随机路径(config_JSON.完整节点路径) : config_JSON.完整节点路径;
+								const _chP = [], _chN = [], _seen = new Map();
+								for (const _addr of 完整优选IP) {
+									const _rm = _addr.match(/^([^#]+?)(?::(\d+))?(?:#(.+))?$/);
+									if (!_rm) continue;
+									const _ip = _rm[1], _pt = _rm[2] || '443';
+									let _nm = _rm[3] || _ip;
+									const _cnt = _seen.get(_nm) || 0; _seen.set(_nm, _cnt + 1);
+									if (_cnt > 0) _nm = _nm + ' ' + _cnt;
+									_chN.push(_nm);
+									const _en = JSON.stringify(_nm), _eh = JSON.stringify(config_JSON.HOST), _ep = JSON.stringify(_全路径);
+									_chP.push('  - {name: ' + _en + ', server: ' + _ip + ', port: ' + _pt + ', type: ' + 协议类型 + ', uuid: 00000000-0000-4000-8000-000000000000, tls: true, skip-cert-verify: ' + config_JSON.跳过证书验证 + ', servername: ' + _eh + ', client-fingerprint: ' + config_JSON.Fingerprint + ', network: ws, ws-opts: {path: ' + _ep + ', headers: {Host: ' + _eh + '}}}');
+								}
+								const _nY = _chN.map(n => '      - ' + n).join('\n');
+								订阅内容 = 'port: 7890\nsocks-port: 7891\nallow-lan: true\nmode: rule\nlog-level: info\nexternal-controller: 127.0.0.1:9090\nproxies:\n' + _chP.join('\n') + '\nproxy-groups:\n  - name: 🚀 节点选择\n    type: select\n    proxies:\n' + _nY + '\n      - DIRECT\n  - name: ♻️ 自动选择\n    type: url-test\n    proxies:\n' + _nY + '\n    url: http://www.gstatic.com/generate_204\n    interval: 300\nrules:\n  - MATCH,🚀 节点选择\n';
+								responseHeaders["content-type"] = 订阅类型 === 'clash' ? 'application/x-yaml; charset=utf-8' : 'application/json; charset=utf-8';
 							}
-							const _nY = _chN.map(n => '      - ' + n).join('\n');
-							订阅内容 = 'port: 7890\nsocks-port: 7891\nallow-lan: true\nmode: rule\nlog-level: info\nexternal-controller: 127.0.0.1:9090\nproxies:\n' + _chP.join('\n') + '\nproxy-groups:\n  - name: 🚀 节点选择\n    type: select\n    proxies:\n' + _nY + '\n      - DIRECT\n  - name: ♻️ 自动选择\n    type: url-test\n    proxies:\n' + _nY + '\n    url: http://www.gstatic.com/generate_204\n    interval: 300\nrules:\n  - MATCH,🚀 节点选择\n';
-							responseHeaders["content-type"] = 订阅类型 === 'clash' ? 'application/x-yaml; charset=utf-8' : 'application/json; charset=utf-8';
-
 						} // close if(true)
 						} else { // 订阅转换
 							const subConvCacheKey = 'SUBCONVERT:' + 订阅类型;
