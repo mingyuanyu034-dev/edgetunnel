@@ -358,6 +358,11 @@ export default {
 						const 协议类型 = ((url.searchParams.has('surge') || ua.includes('surge')) && config_JSON.协议类型 !== 'ss') ? 'tro' + 'jan' : config_JSON.协议类型;
 						let 订阅内容 = '';
 						const 订阅缓存键 = `${订阅TOKEN}:${订阅类型}`;
+						// KV 缓存优先（scheduled/后台预热的 SUBAPI 完整结果，含 ACL4SSR 规则）
+						if ((订阅类型 === 'clash' || 订阅类型 === 'singbox') && !订阅内容) {
+							try { if (env.KV) { const cc = JSON.parse(await env.KV.get('SUBCONVERT:' + 订阅类型) || '{}'); if (cc._ts > Date.now() - 3600000) { 订阅内容 = cc.content; responseHeaders['content-type'] = 订阅类型 === 'clash' ? 'application/x-yaml; charset=utf-8' : 'application/json; charset=utf-8'; } } } catch (e) { }
+						}
+						if (订阅内容) return new Response(订阅内容, { status: 200, headers: responseHeaders });
 						const 订阅缓存命中 = 订阅缓存.get(订阅缓存键);
 						if (订阅缓存命中 && 订阅缓存命中.expiry > Date.now()) {
 							if (订阅类型 === 'singbox') responseHeaders["content-type"] = 'application/json; charset=utf-8';
@@ -540,7 +545,23 @@ export default {
 						}
 						const ghProxyOrigin = url.protocol + '//' + url.host;
 							订阅内容 = 订阅内容.replace(/https:\/\/raw\.githubusercontent\.com\//g, ghProxyOrigin + '/raw.githubusercontent.com/').replace(/https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/download\//g, ghProxyOrigin + '/github.com/$1/$2/releases/download/');
-							订阅缓存.set(订阅缓存键, { content: 订阅内容, expiry: Date.now() + 30000 });
+							// 后台异步拉 SUBAPI 完整版→写 KV（下次请求即拿完整规则集）
+					if ((订阅类型 === 'clash' || 订阅类型 === 'singbox') && !订阅转换后端请求订阅 && !作为优选订阅生成器) {
+						ctx.waitUntil((async () => {
+							try {
+								const subConvUrl = config_JSON.订阅转换配置.SUBAPI + '/sub?target=' + 订阅类型 + '&url=' + encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 今日订阅转换后端专属TOKEN) + '&config=' + encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG.replace('https://raw.githubusercontent.com/', url.protocol + '//' + url.host + '/raw.githubusercontent.com/')) + '&emoji=' + (config_JSON.订阅转换配置.SUBEMOJI||false);
+								const ctrl = new AbortController();
+								const t = setTimeout(() => ctrl.abort(), 60000);
+								const res = await fetch(subConvUrl, { headers: { 'User-Agent': 'edgetunnel-subapi-warmer' }, signal: ctrl.signal });
+								clearTimeout(t);
+								if (res.ok) {
+									const full = await res.text();
+									if (env.KV && full.length > 10000) await env.KV.put('SUBCONVERT:' + 订阅类型, JSON.stringify({ content: full, _ts: Date.now() }));
+								}
+							} catch (e) { }
+						})());
+					}
+					订阅缓存.set(订阅缓存键, { content: 订阅内容, expiry: Date.now() + 30000 });
 						if (订阅缓存.size > 32) { const now = Date.now(); for (const [k, v] of 订阅缓存) { if (v.expiry <= now) 订阅缓存.delete(k); } }
 						return new Response(订阅内容, { status: 200, headers: responseHeaders });
 					}
