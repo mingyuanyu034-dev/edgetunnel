@@ -504,7 +504,7 @@ export default {
 								const _sc = new AbortController(); const _st = setTimeout(() => _sc.abort(), 45000);
 								const _sr = await fetch(_su, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel (https://github.com/cmliu/edge' + 'tunnel)' }, signal: _sc.signal });
 								clearTimeout(_st);
-								if (_sr.ok) { const _txt = await _sr.text(); if (_txt && _txt.length > 10000) { 订阅内容 = _txt; } }
+								if (_sr.ok) { const _txt = await _sr.text(); if (_txt && _txt.length > 500 && !_txt.includes('Welcome to nginx') && !_txt.includes('error code')) { 订阅内容 = _txt; } }
 							} catch (e) { }
 							// SUBAPI 失败 → 本地生成 fallback
 							if (!订阅内容) {
